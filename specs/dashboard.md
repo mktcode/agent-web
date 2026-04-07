@@ -126,6 +126,7 @@ Display:
 * submit button
 * chat transcript
 * display mode toggle
+* in-flight activity indicator while the agent has not yet produced a final reply
 
 The default display mode is an intuitive chat transcript.
 The dashboard must also expose the underlying streamed backend events through a secondary raw-events display mode.
@@ -140,6 +141,16 @@ Streaming rules:
 
 * render streamed content in arrival order
 * default to a chat-oriented presentation that is intuitive to read
+* the chat-oriented presentation must be derived from user-visible session entries rather than transport-level deltas
+* chat mode must show conversation entries that correspond to persisted session content, including `message` entries with user-visible roles and `custom_message` entries only when `display=true`
+* chat mode must not show transport-only partials such as deltas, token fragments, or other intermediate stream events when those do not correspond to a user-visible session entry
+* metadata entries such as `session`, `model_change`, `thinking_level_change`, `custom`, `label`, and `session_info` must not appear in chat mode
+* summary-style entries such as compaction and branch summaries may appear in chat mode only as clearly secondary system-style context items, not as assistant prose
+* while a prompt stream is active and no final assistant reply is available yet, the prompt section must show an activity indicator
+* the activity indicator may use at least two user-facing states: `thinking` and `working`
+* `thinking` is used when the current visible agent activity corresponds to assistant thinking content
+* `working` is used for other in-flight activity, such as tool calls, tool results, command execution, or any non-final agent work that is not assistant thinking
+* the activity indicator must disappear once a final assistant reply is available or the stream finishes without one
 * provide a raw-events mode that shows the underlying streamed backend event data
 * raw-events mode may represent events as raw JSON or minimally formatted JSON
 * the chat display must be derived from the streamed backend events and must not invent content that was not present in the stream
