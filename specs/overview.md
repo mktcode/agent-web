@@ -69,7 +69,7 @@ Rules:
 
 ## Module Architecture
 
-The frontend is composed of strictly separated modules, each defined in `specs-ui/`.
+The frontend is composed of strictly separated modules, each defined in `specs/`.
 
 Dependency direction is one-way:
 
@@ -83,10 +83,9 @@ Agent API Client
 
 ### Module Specifications
 
-* Authentication → `specs-ui/authentication.md`
-* Agent API Client → `specs-ui/agent-api.md`
-* Dashboard UI → `specs-ui/dashboard.md`
-* Testing → `specs-ui/testing.md`
+* Authentication → `specs/authentication.md`
+* Agent API Client → `specs/agent-api.md`
+* Dashboard UI → `specs/dashboard.md`
 
 ---
 
@@ -150,6 +149,12 @@ The following are explicitly out of scope:
 * optimistic UI for mutating operations
 * offline support
 * mobile-native applications
+
+---
+
+## Testing
+
+Automated tests are not planned for this project at this time, but the implementation must be testable and maintainable enough to support future tests.
 
 ---
 
