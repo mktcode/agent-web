@@ -109,7 +109,10 @@ Interactions:
 
 Rules:
 
-* selecting a session affects only future prompt submissions
+* selecting a session sets the active session for future prompt submissions
+* selecting a session also loads that session's persisted transcript history
+* persisted transcript history is loaded from `GET /agent/session/:sessionId/items?format=ui`
+* the dashboard may also load raw persisted history from `GET /agent/session/:sessionId/items?format=raw` for the raw-events mode
 * deleting the active session clears the current selection
 * after deletion, the dashboard refreshes the session list
 
@@ -135,31 +138,35 @@ Submission rules:
 
 * if no session is selected, submit `prompt` only
 * if a session is selected, submit `prompt` plus `sessionId`
+* prompt submissions must request `format: "ui"` for the primary transcript workflow
 * while a prompt stream is active, disable additional prompt submissions
 
 Streaming rules:
 
 * render streamed content in arrival order
-* default to a chat-oriented presentation that is intuitive to read
-* the chat-oriented presentation must be derived from user-visible session entries rather than transport-level deltas
-* chat mode must show conversation entries that correspond to persisted session content, including `message` entries with user-visible roles and `custom_message` entries only when `display=true`
-* chat mode must not show transport-only partials such as deltas, token fragments, or other intermediate stream events when those do not correspond to a user-visible session entry
-* metadata entries such as `session`, `model_change`, `thinking_level_change`, `custom`, `label`, and `session_info` must not appear in chat mode
-* summary-style entries such as compaction and branch summaries may appear in chat mode only as clearly secondary system-style context items, not as assistant prose
+* default to a chat-oriented presentation that is driven directly by backend `ui` items rather than frontend projection of raw PI data
+* repeated `ui` events with the same item `id` must replace the previous version of that item in the client
+* chat mode must render only `UiSessionItem` values returned by the backend
+* chat mode must not attempt to derive user-visible items from raw PI events when `ui` data is available
+* `message` items render as user or assistant chat bubbles according to `role`
+* `thinking` items render as secondary in-flight or historical thinking content
+* `tool` items render as secondary system-style activity items
 * while a prompt stream is active and no final assistant reply is available yet, the prompt section must show an activity indicator
 * the activity indicator may use at least two user-facing states: `thinking` and `working`
-* `thinking` is used when the current visible agent activity corresponds to assistant thinking content
-* `working` is used for other in-flight activity, such as tool calls, tool results, command execution, or any non-final agent work that is not assistant thinking
+* `thinking` is used when the latest relevant in-flight `ui` item has `kind: "thinking"` and `status: "streaming"`
+* `working` is used for other in-flight activity, such as `tool` items or streaming assistant messages that are not thinking
 * the activity indicator must disappear once a final assistant reply is available or the stream finishes without one
-* provide a raw-events mode that shows the underlying streamed backend event data
-* raw-events mode may represent events as raw JSON or minimally formatted JSON
-* the chat display must be derived from the streamed backend events and must not invent content that was not present in the stream
+* provide a raw-events mode that shows the underlying backend `raw` history or `raw` streamed data
+* raw-events mode may represent items as raw JSON or minimally formatted JSON
+* the chat display must not invent content that was not present in backend `ui` items
 * if the backend returns `X-Agent-Session-Id`, update the active session selection to that value
+* when a new session becomes active, the dashboard must load its persisted `ui` items and render them as the current transcript baseline
 
 Completion rules:
 
 * when streaming completes, re-enable prompt submission
 * refresh the session list so a newly created session appears in the dashboard
+* refresh the active session's persisted `ui` items after completion so the visible transcript matches stored history
 
 Failure rules:
 
@@ -177,7 +184,9 @@ The minimal UI state includes only:
 * session list snapshot
 * selected agent session ID
 * in-flight mutation state
-* streamed events for the current visible run
+* persisted `ui` items for the active session
+* optional raw history or raw stream data for raw-events mode
+* in-flight streamed `ui` item snapshots for the active prompt
 
 No background synchronization is required.
 
@@ -191,7 +200,6 @@ The following are out of scope:
 * markdown rendering for agent output
 * diff viewers
 * session rename
-* prompt history beyond what the current streamed log shows
 * automatic stream reconnection
 
 ---
@@ -200,4 +208,4 @@ The following are out of scope:
 
 At all times:
 
-> The dashboard exposes every backend capability through direct, explicit controls, with an intuitive chat interface as the primary workflow and raw backend event data available on demand.
+> The dashboard exposes every backend capability through direct, explicit controls, with an intuitive chat interface driven by backend `ui` session items as the primary workflow and raw backend data available on demand.

@@ -18,7 +18,10 @@ export type BranchList = {
 };
 
 export type AgentSession = {
+  allMessagesText?: string;
+  cwd?: string;
   id: string;
+  path?: string;
   name?: string;
   created?: string;
   modified?: string;
@@ -28,6 +31,34 @@ export type AgentSession = {
 
 export type AgentSessionList = {
   sessions: AgentSession[];
+};
+
+export type AgentSessionResponse = {
+  session: AgentSession;
+};
+
+export type PromptFormat = "raw" | "ui";
+
+export type UiSessionItem = {
+  id: string;
+  sessionId: string;
+  timestamp: string;
+  kind: "message" | "thinking" | "tool";
+  status: "streaming" | "final" | "error";
+  isError: boolean;
+  role?: "user" | "assistant";
+  text?: string;
+  toolName?: string;
+  toolCallId?: string;
+};
+
+export type UiSessionItemEvent = {
+  type: "session_item";
+  item: UiSessionItem;
+};
+
+export type AgentSessionItemsResponse<TItem = unknown> = {
+  items: TItem[];
 };
 
 export type CheckoutBranchRequest = {
@@ -53,6 +84,7 @@ export type DeleteSessionRequest = {
 };
 
 export type PromptRequest = {
+  format?: PromptFormat;
   prompt: string;
   sessionId?: string;
 };

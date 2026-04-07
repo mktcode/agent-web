@@ -2,8 +2,8 @@ import type { FormEvent } from "react";
 
 import { ErrorPanel } from "@/components/dashboard/error-panel";
 import { PromptRunCard } from "@/components/dashboard/prompt-run-card";
-import type { DisplayMode, PromptRunView } from "@/components/dashboard/prompt-utils";
-import type { AgentSession, BackendError } from "@/lib/dashboard-types";
+import type { ActivityState, DisplayMode } from "./prompt-utils";
+import type { AgentSession, BackendError, UiSessionItem } from "@/lib/dashboard-types";
 
 type PromptPanelProps = {
   actions: {
@@ -12,25 +12,23 @@ type PromptPanelProps = {
     onSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>;
   };
   state: {
+    activityState: ActivityState;
+    activeRawItems: unknown[];
+    activeUiItems: UiSessionItem[];
     displayMode: DisplayMode;
     isStreaming: boolean;
+    isTranscriptLoading: boolean;
     prompt: string;
     promptError: BackendError | null;
-    runViews: PromptRunView[];
-    selectedSessionHasTranscript: boolean;
+    transcriptError: BackendError | null;
     selectedSession: AgentSession | null;
     selectedSessionId: string | null;
   };
 };
 
-function getLatestActivity(runViews: PromptRunView[]) {
-  return [...runViews].reverse().find((run) => run.activityState !== null) ?? null;
-}
-
 export function PromptPanel({ actions, state }: PromptPanelProps) {
-  const latestActivityRun = getLatestActivity(state.runViews);
-  const activityLabel = latestActivityRun?.activityState
-    ? latestActivityRun.activityState === "thinking"
+  const activityLabel = state.activityState
+    ? state.activityState === "thinking"
       ? "Thinking"
       : "Working"
     : null;
@@ -87,6 +85,7 @@ export function PromptPanel({ actions, state }: PromptPanelProps) {
         </div>
 
         <ErrorPanel error={state.promptError} title="Prompt request failed" />
+  <ErrorPanel error={state.transcriptError} title="Transcript load failed" />
 
         <form className="mt-6 space-y-4" onSubmit={actions.onSubmit}>
           <label className="grid gap-2">
@@ -103,8 +102,8 @@ export function PromptPanel({ actions, state }: PromptPanelProps) {
           <div className="flex items-center justify-between gap-4">
             <p className="text-sm text-(--muted)">
               {state.isStreaming
-                ? "A prompt stream is active. Additional submissions stay disabled until it finishes."
-                : "Prompts submit as prompt only or prompt plus sessionId, depending on the current selection."}
+                ? "A UI item stream is active. Additional submissions stay disabled until it finishes."
+                : "Prompts submit with backend UI mode, and the selected session history stays synchronized from persisted session items."}
             </p>
             <button
               className="rounded-full bg-(--accent) px-6 py-3 text-sm font-semibold text-white transition hover:bg-(--accent-strong) disabled:cursor-not-allowed disabled:opacity-70"
@@ -117,20 +116,14 @@ export function PromptPanel({ actions, state }: PromptPanelProps) {
         </form>
 
         <div className="mt-6 space-y-4">
-          {state.runViews.length > 0 ? (
-            state.runViews.map((run) => (
-              <PromptRunCard key={run.id} displayMode={state.displayMode} run={run} />
-            ))
-          ) : state.selectedSessionId && !state.selectedSessionHasTranscript ? (
-            <div className="rounded-4xl border border-dashed border-(--border) p-6 text-sm text-(--muted)">
-              No transcript is available yet for the selected persisted session in this browser view.
-              Continue the session with a new prompt to populate the chat transcript here.
-            </div>
-          ) : (
-            <div className="rounded-4xl border border-dashed border-(--border) p-6 text-sm text-(--muted)">
-              Submit a prompt to start the transcript.
-            </div>
-          )}
+          <PromptRunCard
+            activityState={state.activityState}
+            displayMode={state.displayMode}
+            isTranscriptLoading={state.isTranscriptLoading}
+            rawItems={state.activeRawItems}
+            selectedSessionId={state.selectedSessionId}
+            uiItems={state.activeUiItems}
+          />
         </div>
       </section>
     </div>

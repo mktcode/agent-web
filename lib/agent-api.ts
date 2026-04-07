@@ -5,6 +5,7 @@ import type {
   DeleteBranchRequest,
   DeleteSessionRequest,
   MergeBranchRequest,
+  PromptFormat,
   PromptRequest,
   PushBranchRequest,
 } from "@/lib/dashboard-types";
@@ -101,6 +102,19 @@ export function deleteGitBranch(payload: DeleteBranchRequest) {
 
 export function getAgentSessions() {
   return requestAgentApi("/agent/sessions");
+}
+
+export function getAgentSession(sessionId: string) {
+  return requestAgentApi(`/agent/session/${encodeURIComponent(sessionId)}`);
+}
+
+export function getAgentSessionItems(
+  sessionId: string,
+  format: PromptFormat = "raw",
+) {
+  return requestAgentApi(
+    `/agent/session/${encodeURIComponent(sessionId)}/items?format=${format}`,
+  );
 }
 
 export function deleteAgentSession(payload: DeleteSessionRequest) {

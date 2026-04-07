@@ -63,6 +63,8 @@ The module must expose one function or handler per existing backend capability.
 ### Agent
 
 * `GET /agent/sessions`
+* `GET /agent/session/:sessionId`
+* `GET /agent/session/:sessionId/items`
 * `DELETE /agent/session`
 * `POST /agent/prompt`
 
@@ -82,8 +84,15 @@ For prompt execution:
 
 * accept `prompt`
 * accept optional `sessionId`
+* accept optional `format`
 * forward the backend SSE response body to the browser in order
 * forward the effective session ID from `X-Agent-Session-Id`
+
+For persisted session history:
+
+* fetch session metadata by `sessionId`
+* fetch session items by `sessionId`
+* support optional `format` query forwarding for session items
 
 ---
 
@@ -115,10 +124,23 @@ For `POST /agent/prompt`:
 * do not buffer the full stream before sending
 * do not reinterpret event payloads
 * end the browser response when the backend stream ends
+* support both `raw` and `ui` prompt formats exactly as defined by the backend
+
+For `GET /agent/session/:sessionId/items`:
+
+* return the backend response body unchanged
+* support both `raw` and `ui` history formats exactly as defined by the backend
 
 ---
 
 ## UI Data Contract
+
+The backend exposes two representations for turn or history data:
+
+* `raw` → PI-native events or session entries
+* `ui` → UI-friendly projected items derived from PI data
+
+If `format` is omitted, the backend defaults to `raw`.
 
 The dashboard relies on the following backend shapes:
 
@@ -146,15 +168,75 @@ The dashboard relies on the following backend shapes:
   "sessions": [
     {
       "id": "session-1",
+      "path": "path/to/session.jsonl",
+      "cwd": "/repo/path",
       "name": "Session session-1",
       "created": "date",
       "modified": "date",
       "messageCount": 1,
-      "firstMessage": "text"
+      "firstMessage": "text",
+      "allMessagesText": "all concatenated messages"
     }
   ]
 }
 ```
+
+### Session metadata
+
+```json
+{
+  "session": {
+    "id": "session-1",
+    "path": "path/to/session.jsonl",
+    "cwd": "/repo/path",
+    "name": "Session session-1",
+    "created": "date",
+    "modified": "date",
+    "messageCount": 1,
+    "firstMessage": "text",
+    "allMessagesText": "all concatenated messages"
+  }
+}
+```
+
+### UI session item
+
+```json
+{
+  "id": "item-1",
+  "sessionId": "session-1",
+  "timestamp": "ISO date string",
+  "kind": "message",
+  "status": "final",
+  "role": "assistant",
+  "text": "Hello",
+  "isError": false
+}
+```
+
+### UI prompt stream event
+
+```json
+{
+  "type": "session_item",
+  "item": {
+    "id": "item-1",
+    "sessionId": "session-1",
+    "timestamp": "ISO date string",
+    "kind": "message",
+    "status": "streaming",
+    "role": "assistant",
+    "text": "Hel",
+    "isError": false
+  }
+}
+```
+
+Rules:
+
+* repeated UI events with the same item `id` replace the previous version of that item in the client
+* `ui` payloads must be treated as authoritative UI state and must not be reprojected from raw PI data inside the frontend
+* `raw` payloads remain available for inspection and debugging only
 
 The frontend may display additional fields returned by the backend, but it must not require fields not already provided by the API.
 
@@ -168,7 +250,7 @@ The following are out of scope:
 * request batching
 * retries
 * caching beyond normal Next.js request behavior
-* transforming agent events into a richer protocol
+* transforming raw PI events into a richer protocol inside the frontend
 
 ---
 
@@ -176,4 +258,4 @@ The following are out of scope:
 
 At all times:
 
-> Every agent API request originates on the server, includes the backend bearer token, and preserves the backend contract seen by the dashboard.
+> Every agent API request originates on the server, includes the backend bearer token, and preserves the backend contract seen by the dashboard for both `raw` and `ui` formats.

@@ -6,20 +6,23 @@ import type { FormEvent } from "react";
 import { DashboardHeader } from "@/components/dashboard/dashboard-header";
 import { PromptPanel } from "@/components/dashboard/prompt-panel";
 import {
-  buildPromptRunView,
+  getUiSessionActivityState,
+  isUiSessionItemEvent,
   parseSseFrames,
+  upsertUiSessionItem,
   type DisplayMode,
-  type TranscriptRun,
-} from "@/components/dashboard/prompt-utils";
+} from "./prompt-utils";
 import { RepositoryPanel } from "@/components/dashboard/repository-panel";
 import { SessionsPanel } from "@/components/dashboard/sessions-panel";
 import type {
   AgentSession,
+  AgentSessionItemsResponse,
   AgentSessionList,
   BackendError,
   BackendErrorResponse,
   BranchList,
   RepositoryStatus,
+  UiSessionItem,
 } from "@/lib/dashboard-types";
 
 type DashboardClientProps = {
@@ -145,19 +148,22 @@ export function DashboardClient({ user }: DashboardClientProps) {
   const [repositoryStatus, setRepositoryStatus] = useState<RepositoryStatus | null>(null);
   const [branches, setBranches] = useState<string[]>([]);
   const [sessions, setSessions] = useState<AgentSession[]>([]);
+  const [sessionUiItemsById, setSessionUiItemsById] = useState<Record<string, UiSessionItem[]>>({});
+  const [sessionRawItemsById, setSessionRawItemsById] = useState<Record<string, unknown[]>>({});
   const [repositoryError, setRepositoryError] = useState<BackendError | null>(null);
   const [sessionsError, setSessionsError] = useState<BackendError | null>(null);
   const [gitActionError, setGitActionError] = useState<BackendError | null>(null);
   const [sessionActionError, setSessionActionError] = useState<BackendError | null>(null);
   const [promptError, setPromptError] = useState<BackendError | null>(null);
+  const [transcriptError, setTranscriptError] = useState<BackendError | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(true);
+  const [isTranscriptLoading, setIsTranscriptLoading] = useState(false);
   const [pendingGitAction, setPendingGitAction] = useState<string | null>(null);
   const [pendingSessionDeletion, setPendingSessionDeletion] = useState<string | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [displayMode, setDisplayMode] = useState<DisplayMode>("chat");
   const [prompt, setPrompt] = useState("");
-  const [runs, setRuns] = useState<TranscriptRun[]>([]);
   const [checkoutBranch, setCheckoutBranch] = useState("");
   const [mergeSource, setMergeSource] = useState("");
   const [mergeTarget, setMergeTarget] = useState("");
@@ -176,6 +182,44 @@ export function DashboardClient({ user }: DashboardClientProps) {
       setSessions,
       setSessionsError,
     });
+  }
+
+  async function requestSessionHistory(sessionId: string) {
+    return Promise.all([
+      requestJson<AgentSessionItemsResponse<UiSessionItem>>(
+        `/api/dashboard/agent/session/${encodeURIComponent(sessionId)}/items?format=ui`,
+      ),
+      requestJson<AgentSessionItemsResponse<unknown>>(
+        `/api/dashboard/agent/session/${encodeURIComponent(sessionId)}/items?format=raw`,
+      ),
+    ]);
+  }
+
+  function applySessionHistory(
+    sessionId: string,
+    uiResult: RequestResult<AgentSessionItemsResponse<UiSessionItem>>,
+    rawResult: RequestResult<AgentSessionItemsResponse<unknown>>,
+  ) {
+    if (uiResult.data) {
+      setSessionUiItemsById((currentItems) => ({
+        ...currentItems,
+        [sessionId]: uiResult.data.items,
+      }));
+    }
+
+    if (rawResult.data) {
+      setSessionRawItemsById((currentItems) => ({
+        ...currentItems,
+        [sessionId]: rawResult.data.items,
+      }));
+    }
+
+    setTranscriptError(uiResult.error || rawResult.error);
+  }
+
+  async function refreshSessionHistory(sessionId: string) {
+    const [uiResult, rawResult] = await requestSessionHistory(sessionId);
+    applySessionHistory(sessionId, uiResult, rawResult);
   }
 
   useEffect(() => {
@@ -224,19 +268,54 @@ export function DashboardClient({ user }: DashboardClientProps) {
     }
   }, [branches, repositoryStatus]);
 
+  useEffect(() => {
+    if (!selectedSessionId) {
+      setTranscriptError(null);
+      setIsTranscriptLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    setIsTranscriptLoading(true);
+    setTranscriptError(null);
+
+    void requestSessionHistory(selectedSessionId)
+      .then(([uiResult, rawResult]) => {
+        if (cancelled) {
+          return;
+        }
+
+        applySessionHistory(selectedSessionId, uiResult, rawResult);
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsTranscriptLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedSessionId]);
+
   const selectedSession = useMemo(
     () => sessions.find((session) => session.id === selectedSessionId) ?? null,
     [selectedSessionId, sessions],
   );
 
-  const runViews = useMemo(() => runs.map(buildPromptRunView), [runs]);
-  const visibleRunViews = useMemo(() => {
-    if (!selectedSessionId) {
-      return runViews;
-    }
-
-    return runViews.filter((run) => run.sessionId === selectedSessionId);
-  }, [runViews, selectedSessionId]);
+  const activeUiItems = useMemo(
+    () => (selectedSessionId ? sessionUiItemsById[selectedSessionId] ?? [] : []),
+    [selectedSessionId, sessionUiItemsById],
+  );
+  const activeRawItems = useMemo(
+    () => (selectedSessionId ? sessionRawItemsById[selectedSessionId] ?? [] : []),
+    [selectedSessionId, sessionRawItemsById],
+  );
+  const activityState = useMemo(
+    () => getUiSessionActivityState(activeUiItems),
+    [activeUiItems],
+  );
 
   async function runGitAction(label: string, input: RequestInit & { url: string }) {
     setPendingGitAction(label);
@@ -279,6 +358,17 @@ export function DashboardClient({ user }: DashboardClientProps) {
       setSelectedSessionId(null);
     }
 
+    setSessionUiItemsById((currentItems) => {
+      const nextItems = { ...currentItems };
+      delete nextItems[sessionId];
+      return nextItems;
+    });
+    setSessionRawItemsById((currentItems) => {
+      const nextItems = { ...currentItems };
+      delete nextItems[sessionId];
+      return nextItems;
+    });
+
     setPendingSessionDeletion(null);
     await refreshSnapshots({ includeRepository: false, includeSessions: true });
   }
@@ -293,24 +383,12 @@ export function DashboardClient({ user }: DashboardClientProps) {
     setPromptError(null);
     setIsStreaming(true);
 
-    const runId = crypto.randomUUID();
     const submittedPrompt = prompt.trim();
     const startingSessionId = selectedSessionId;
+    let effectiveSessionId = startingSessionId;
+    let streamStarted = false;
 
     setPrompt("");
-    setRuns((currentRuns) => [
-      ...currentRuns,
-      {
-        completed: false,
-        events: [],
-        id: runId,
-        prompt: submittedPrompt,
-        sessionId: startingSessionId,
-        streamError: null,
-      },
-    ]);
-
-    let streamStarted = false;
 
     try {
       const response = await fetch("/api/dashboard/agent/prompt", {
@@ -319,6 +397,7 @@ export function DashboardClient({ user }: DashboardClientProps) {
           "content-type": "application/json",
         },
         body: JSON.stringify({
+          format: "ui",
           prompt: submittedPrompt,
           ...(startingSessionId ? { sessionId: startingSessionId } : {}),
         }),
@@ -326,7 +405,6 @@ export function DashboardClient({ user }: DashboardClientProps) {
 
       if (!response.ok) {
         const payload = (await response.json()) as BackendErrorResponse;
-        setRuns((currentRuns) => currentRuns.filter((run) => run.id !== runId));
         setPromptError(payload.error);
         setIsStreaming(false);
         return;
@@ -337,11 +415,17 @@ export function DashboardClient({ user }: DashboardClientProps) {
       const nextSessionId = response.headers.get("x-agent-session-id");
 
       if (nextSessionId) {
+        effectiveSessionId = nextSessionId;
         setSelectedSessionId(nextSessionId);
-        setRuns((currentRuns) =>
-          currentRuns.map((run) =>
-            run.id === runId ? { ...run, sessionId: nextSessionId } : run,
-          ),
+        setSessionUiItemsById((currentItems) =>
+          nextSessionId in currentItems
+            ? currentItems
+            : { ...currentItems, [nextSessionId]: [] },
+        );
+        setSessionRawItemsById((currentItems) =>
+          nextSessionId in currentItems
+            ? currentItems
+            : { ...currentItems, [nextSessionId]: [] },
         );
       }
 
@@ -351,6 +435,29 @@ export function DashboardClient({ user }: DashboardClientProps) {
         throw new Error("Prompt stream was missing a response body.");
       }
 
+      const applyUiEvents = (events: Array<{ raw: string; parsed: unknown }>) => {
+        events.forEach((streamEvent) => {
+          if (!isUiSessionItemEvent(streamEvent.parsed)) {
+            return;
+          }
+
+          const uiEvent = streamEvent.parsed;
+          const { item } = uiEvent;
+          const sessionId = item.sessionId || effectiveSessionId;
+
+          if (!sessionId) {
+            return;
+          }
+
+          effectiveSessionId = sessionId;
+
+          setSessionUiItemsById((currentItems) => ({
+            ...currentItems,
+            [sessionId]: upsertUiSessionItem(currentItems[sessionId] ?? [], item),
+          }));
+        });
+      };
+
       const decoder = new TextDecoder();
       let buffer = "";
 
@@ -359,23 +466,7 @@ export function DashboardClient({ user }: DashboardClientProps) {
 
         if (done) {
           const parsed = parseSseFrames(buffer + "\n\n");
-
-          if (parsed.events.length > 0) {
-            setRuns((currentRuns) =>
-              currentRuns.map((run) =>
-                run.id === runId
-                  ? { ...run, completed: true, events: [...run.events, ...parsed.events] }
-                  : run,
-              ),
-            );
-          } else {
-            setRuns((currentRuns) =>
-              currentRuns.map((run) =>
-                run.id === runId ? { ...run, completed: true } : run,
-              ),
-            );
-          }
-
+          applyUiEvents(parsed.events);
           break;
         }
 
@@ -383,34 +474,19 @@ export function DashboardClient({ user }: DashboardClientProps) {
 
         const parsed = parseSseFrames(buffer);
         buffer = parsed.rest;
-
-        if (parsed.events.length > 0) {
-          setRuns((currentRuns) =>
-            currentRuns.map((run) =>
-              run.id === runId
-                ? { ...run, events: [...run.events, ...parsed.events] }
-                : run,
-            ),
-          );
-        }
+        applyUiEvents(parsed.events);
       }
     } catch {
-      setRuns((currentRuns) =>
-        currentRuns.map((run) =>
-          run.id === runId
-            ? {
-                ...run,
-                completed: true,
-                streamError: "The stream ended unexpectedly.",
-              }
-            : run,
-        ),
-      );
+      setPromptError(createNetworkError("The stream ended unexpectedly."));
     } finally {
       setIsStreaming(false);
 
       if (streamStarted) {
         await refreshSnapshots({ includeRepository: false, includeSessions: true });
+
+        if (effectiveSessionId) {
+          await refreshSessionHistory(effectiveSessionId);
+        }
       }
     }
   }
@@ -422,6 +498,9 @@ export function DashboardClient({ user }: DashboardClientProps) {
         onRefresh={() => {
           startTransition(() => {
             void refreshSnapshots();
+            if (selectedSessionId) {
+              void refreshSessionHistory(selectedSessionId);
+            }
           });
         }}
         user={user}
@@ -474,15 +553,17 @@ export function DashboardClient({ user }: DashboardClientProps) {
             onSubmit: handlePromptSubmit,
           }}
           state={{
+            activityState,
+            activeRawItems,
+            activeUiItems,
             displayMode,
             isStreaming,
+            isTranscriptLoading,
             prompt,
             promptError,
-            runViews: visibleRunViews,
-            selectedSessionHasTranscript:
-              selectedSessionId === null || visibleRunViews.length > 0,
             selectedSession,
             selectedSessionId,
+            transcriptError,
           }}
         />
       </section>
