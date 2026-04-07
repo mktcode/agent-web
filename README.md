@@ -1,36 +1,65 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+This project is a minimal authenticated dashboard for an existing agent API server.
 
-## Getting Started
+The first implementation pass adds the authentication boundary:
+
+- Better Auth email/password authentication with persistent SQLite storage
+- A public `/login` route and a protected `/` route
+- Automatic Better Auth schema migration on first server use
+- An out-of-band provisioning script for creating dashboard users
+
+## Setup
+
+Copy `.env.example` to `.env` and fill in the required values.
+
+Required auth variables:
+
+- `BETTER_AUTH_URL`: base URL of the Next.js app, usually `http://localhost:3000`
+- `BETTER_AUTH_SECRET`: long random secret used by Better Auth
+- `AUTH_DB_PATH`: optional path for the SQLite database, defaults to `.data/auth.sqlite`
+
+Existing backend variables remain required for later dashboard modules:
+
+- `AGENT_API_BASE_URL`
+- `AGENT_API_TOKEN`
+
+This implementation uses Node's built-in `node:sqlite` module, so the runtime must support it.
+
+## Provision A User
+
+Public sign-up is disabled. Create dashboard users out of band:
+
+```bash
+npm run auth:provision -- --email admin@example.com --password strongpassword --name "Admin User"
+```
+
+The command creates the Better Auth schema if needed and then inserts the user if the email is not already present.
+
+## Run The App
 
 First, run the development server:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open `http://localhost:3000/login` and sign in with the provisioned credentials.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Current Scope
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- `/login` is public
+- `/` is protected
+- The dashboard is currently a protected shell for the next implementation passes
 
-## Learn More
+The repository and agent API dashboard modules are not implemented yet.
 
-To learn more about Next.js, take a look at the following resources:
+## Commands
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- `npm run dev`: start the Next.js dev server
+- `npm run lint`: run ESLint
+- `npm run auth:provision -- --email ... --password ... --name ...`: create a dashboard user
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## References
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Next.js App Router documentation
+- Better Auth documentation
+- The specs in `specs/`

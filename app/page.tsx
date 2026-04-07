@@ -1,65 +1,87 @@
-import Image from "next/image";
+import { redirect } from "next/navigation";
 
-export default function Home() {
+import { SignOutButton } from "@/components/auth/sign-out-button";
+import { getDashboardSession } from "@/lib/auth-session";
+
+export const runtime = "nodejs";
+
+const focusAreas = [
+  {
+    label: "Repository control",
+    detail: "Branch state, checkout, merge, push, revert, and branch deletion live here next.",
+  },
+  {
+    label: "Session ledger",
+    detail: "Persisted agent sessions will be listed and removable from this surface.",
+  },
+  {
+    label: "Live event stream",
+    detail: "Prompt execution and raw agent events will anchor the center of the dashboard.",
+  },
+];
+
+export default async function Home() {
+  const session = await getDashboardSession();
+
+  if (!session) {
+    redirect("/login");
+  }
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <main className="mx-auto flex min-h-screen w-full max-w-6xl flex-1 flex-col gap-8 px-6 py-8 sm:px-10 lg:px-12">
+      <section className="rounded-4xl border border-(--border) bg-(--panel) p-6 shadow-(--shadow) backdrop-blur sm:p-8">
+        <div className="flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
+          <div className="max-w-3xl space-y-5">
+            <p className="font-mono text-xs uppercase tracking-[0.3em] text-(--muted)">
+              Authenticated shell
+            </p>
+            <div className="space-y-3">
+              <h1 className="max-w-2xl text-4xl font-semibold tracking-[-0.04em] text-foreground sm:text-5xl">
+                Agent control starts with a locked dashboard boundary.
+              </h1>
+              <p className="max-w-2xl text-base leading-7 text-(--muted) sm:text-lg">
+                The authentication module is in place. The next passes can fill in the
+                repository controls, persisted sessions, and the live event stream without
+                exposing backend credentials to the browser.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-4 rounded-3xl border border-(--border) bg-(--panel-strong) p-5 lg:min-w-[18rem]">
+            <div>
+              <p className="font-mono text-xs uppercase tracking-[0.24em] text-(--muted)">
+                Signed in as
+              </p>
+              <p className="mt-2 text-lg font-medium text-foreground">
+                {session.user.email}
+              </p>
+              <p className="mt-1 text-sm text-(--muted)">
+                {session.user.name}
+              </p>
+            </div>
+            <SignOutButton />
+          </div>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+      </section>
+
+      <section className="grid gap-4 lg:grid-cols-3">
+        {focusAreas.map((area) => (
+          <article
+            key={area.label}
+            className="rounded-[1.75rem] border border-(--border) bg-(--panel) p-6 shadow-(--shadow) backdrop-blur"
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+            <p className="font-mono text-xs uppercase tracking-[0.24em] text-(--muted)">
+              Next module
+            </p>
+            <h2 className="mt-4 text-2xl font-semibold tracking-[-0.03em] text-foreground">
+              {area.label}
+            </h2>
+            <p className="mt-3 text-sm leading-7 text-(--muted)">
+              {area.detail}
+            </p>
+          </article>
+        ))}
+      </section>
+    </main>
   );
 }
