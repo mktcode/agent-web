@@ -17,6 +17,7 @@ type PromptPanelProps = {
     prompt: string;
     promptError: BackendError | null;
     runViews: PromptRunView[];
+    selectedSessionHasTranscript: boolean;
     selectedSession: AgentSession | null;
     selectedSessionId: string | null;
   };
@@ -120,6 +121,11 @@ export function PromptPanel({ actions, state }: PromptPanelProps) {
             state.runViews.map((run) => (
               <PromptRunCard key={run.id} displayMode={state.displayMode} run={run} />
             ))
+          ) : state.selectedSessionId && !state.selectedSessionHasTranscript ? (
+            <div className="rounded-4xl border border-dashed border-(--border) p-6 text-sm text-(--muted)">
+              No transcript is available yet for the selected persisted session in this browser view.
+              Continue the session with a new prompt to populate the chat transcript here.
+            </div>
           ) : (
             <div className="rounded-4xl border border-dashed border-(--border) p-6 text-sm text-(--muted)">
               Submit a prompt to start the transcript.

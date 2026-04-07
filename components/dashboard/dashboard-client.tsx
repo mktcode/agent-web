@@ -230,6 +230,13 @@ export function DashboardClient({ user }: DashboardClientProps) {
   );
 
   const runViews = useMemo(() => runs.map(buildPromptRunView), [runs]);
+  const visibleRunViews = useMemo(() => {
+    if (!selectedSessionId) {
+      return runViews;
+    }
+
+    return runViews.filter((run) => run.sessionId === selectedSessionId);
+  }, [runViews, selectedSessionId]);
 
   async function runGitAction(label: string, input: RequestInit & { url: string }) {
     setPendingGitAction(label);
@@ -471,7 +478,9 @@ export function DashboardClient({ user }: DashboardClientProps) {
             isStreaming,
             prompt,
             promptError,
-            runViews,
+            runViews: visibleRunViews,
+            selectedSessionHasTranscript:
+              selectedSessionId === null || visibleRunViews.length > 0,
             selectedSession,
             selectedSessionId,
           }}

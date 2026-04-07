@@ -26,6 +26,30 @@ export type PromptRunView = TranscriptRun & {
   hasFinalReply: boolean;
 };
 
+const SESSION_ENTRY_TYPES = new Set([
+  "branch_summary",
+  "compaction",
+  "custom",
+  "custom_message",
+  "label",
+  "message",
+  "model_change",
+  "session",
+  "session_info",
+  "thinking_level_change",
+]);
+
+const SESSION_ENTRY_WRAPPER_KEYS = [
+  "data",
+  "entries",
+  "entry",
+  "event",
+  "payload",
+  "sessionEntry",
+  "sessionEntries",
+  "value",
+];
+
 type ToolCallSummary = {
   arguments?: unknown;
   name: string;
@@ -137,6 +161,75 @@ function buildSystemItem(id: string, label: string, body: string) {
     kind: "system" as const,
     label,
   };
+}
+
+function isSessionEntryRecord(value: unknown): value is Record<string, unknown> {
+  return isRecord(value) && typeof value.type === "string" && SESSION_ENTRY_TYPES.has(value.type);
+}
+
+function extractSessionEntries(value: unknown): Array<Record<string, unknown>> {
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => extractSessionEntries(item));
+  }
+
+  if (!isRecord(value)) {
+    return [];
+  }
+
+  if (isSessionEntryRecord(value)) {
+    return [value];
+  }
+
+  const message = value["message"];
+
+  if (isRecord(message) && typeof message["role"] === "string") {
+    return [{ type: "message", message }];
+  }
+
+  const entries: Array<Record<string, unknown>> = [];
+
+  for (const key of SESSION_ENTRY_WRAPPER_KEYS) {
+    if (key in value) {
+      entries.push(...extractSessionEntries(value[key]));
+    }
+  }
+
+  return entries;
+}
+
+function getEntryKey(entry: Record<string, unknown>, index: number) {
+  const entryType = getString(entry.type) || "unknown";
+  const entryId = getString(entry.id);
+
+  if (entryId) {
+    return `${entryType}:${entryId}`;
+  }
+
+  const message = entry.message;
+
+  if (isRecord(message)) {
+    const role = getString(message.role) || "message";
+    const timestamp = String(message.timestamp ?? entry.timestamp ?? index);
+    const responseId = getString(message.responseId);
+
+    if (responseId) {
+      return `${entryType}:${role}:${responseId}`;
+    }
+
+    return `${entryType}:${role}:${timestamp}`;
+  }
+
+  return `${entryType}:${safeStringify(entry)}`;
+}
+
+function dedupeEntries(entries: Array<Record<string, unknown>>) {
+  const uniqueEntries = new Map<string, Record<string, unknown>>();
+
+  entries.forEach((entry, index) => {
+    uniqueEntries.set(getEntryKey(entry, index), entry);
+  });
+
+  return Array.from(uniqueEntries.values());
 }
 
 function getMessageEntryView(
@@ -398,13 +491,23 @@ export function buildPromptRunView(run: TranscriptRun): PromptRunView {
   ];
   let activityState: ActivityState = run.completed ? null : "working";
   let hasFinalReply = false;
+  const runEntries: Array<Record<string, unknown>> = [];
 
-  run.events.forEach((event, index) => {
-    if (!isRecord(event.parsed)) {
+  run.events.forEach((event) => {
+    const entries = extractSessionEntries(event.parsed);
+
+    if (entries.length > 0) {
+      runEntries.push(...entries);
       return;
     }
 
-    const entryView = getEntryView(event.parsed, run, index);
+    if (isRecord(event.parsed)) {
+      runEntries.push(event.parsed);
+    }
+  });
+
+  dedupeEntries(runEntries).forEach((entry, index) => {
+    const entryView = getEntryView(entry, run, index);
 
     if (entryView.items.length > 0) {
       baseItems.push(...entryView.items);
