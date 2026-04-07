@@ -7,6 +7,14 @@ The first implementation pass adds the authentication boundary:
 - Automatic Better Auth schema migration on first server use
 - An out-of-band provisioning script for creating dashboard users
 
+The current implementation also includes the minimal dashboard workflow:
+
+- repository status and branch loading
+- explicit git actions for checkout, merge, push, revert, and delete branch
+- persisted agent session listing, selection, clearing, and deletion
+- prompt submission through a protected SSE proxy
+- a default chat-oriented transcript plus a raw-event view
+
 ## Setup
 
 Copy `.env.example` to `.env` and fill in the required values.
@@ -21,6 +29,8 @@ Existing backend variables remain required for later dashboard modules:
 
 - `AGENT_API_BASE_URL`
 - `AGENT_API_TOKEN`
+
+The dashboard calls the existing agent API server through Next.js route handlers, so that backend must be running and reachable at `AGENT_API_BASE_URL` for repository and prompt features to work.
 
 This implementation uses Node's built-in `node:sqlite` module, so the runtime must support it.
 
@@ -48,9 +58,9 @@ Open `http://localhost:3000/login` and sign in with the provisioned credentials.
 
 - `/login` is public
 - `/` is protected
-- The dashboard is currently a protected shell for the next implementation passes
+- The dashboard loads repository state, persisted sessions, and prompt streaming through protected server-side proxies
 
-The repository and agent API dashboard modules are not implemented yet.
+The UI is intentionally minimal and direct. It does not yet add markdown rendering, session rename, or richer event interpretation.
 
 ## Commands
 
